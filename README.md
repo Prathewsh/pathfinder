@@ -5,7 +5,7 @@
     <b>A fast web path discovery and crawling CLI tool written in Rust.</b>
   </p>
   <p>
-    <a href="https://github.com/Prathewsh/pathfinder/actions"><img src="https://img.shields.io/github/actions/workflow/status/Prathewsh/pathfinder/ci.yml?branch=main" alt="CI Status"></a>
+    <img src="https://img.shields.io/badge/Type-CLI-brightgreen.svg" alt="CLI Tool">
     <img src="https://img.shields.io/badge/language-Rust-orange.svg" alt="Language">
     <a href="https://github.com/Prathewsh/pathfinder/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
   </p>
