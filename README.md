@@ -1,3 +1,16 @@
+<div align="center">
+  <img src="pathfinder.png" alt="Pathfinder Banner">
+  <br />
+  <p>
+    <b>A fast web path discovery and crawling CLI tool written in Rust.</b>
+  </p>
+  <p>
+    <a href="https://github.com/Prathewsh/pathfinder/actions"><img src="https://img.shields.io/github/actions/workflow/status/Prathewsh/pathfinder/ci.yml?branch=main" alt="CI Status"></a>
+    <img src="https://img.shields.io/badge/language-Rust-orange.svg" alt="Language">
+    <a href="https://github.com/Prathewsh/pathfinder/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  </p>
+</div>
+
 # Pathfinder
 
 A fast web path discovery and crawling CLI tool written in Rust. Unlike traditional wordlist-based tools like Gobuster, Pathfinder combines **automatic crawling**, **built-in path brute-forcing (~600 common paths)**, and **link extraction** to discover as many valid URLs as possible on a target website.
