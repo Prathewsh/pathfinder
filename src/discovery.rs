@@ -1,5 +1,13 @@
-/// Built-in common web paths for automatic discovery.
-/// No external wordlist needed.
+//! Curated, root-relative URL candidates for automatic discovery.
+//!
+//! Keep entries grouped by purpose and remove only exact duplicates. Case and
+//! trailing slashes are significant on some servers. Add literal paths rather
+//! than wildcard patterns, queries, or fragments; each entry becomes a request.
+
+/// Returns the built-in candidates in discovery order without allocating.
+///
+/// Paths resolve against the target origin, even when the target has a path
+/// prefix. These are candidates, not a guarantee that an endpoint exists.
 pub fn common_paths() -> &'static [&'static str] {
     &[
         // Common pages
@@ -56,7 +64,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/legal",
         "/sitemap",
         "/sitemap.html",
-
         // Admin / Dashboard
         "/admin",
         "/admin/",
@@ -86,7 +93,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/backoffice",
         "/staff",
         "/internal",
-
         // Authentication & User
         "/auth",
         "/auth/login",
@@ -122,7 +128,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/activate",
         "/2fa",
         "/mfa",
-
         // API endpoints
         "/api",
         "/api/",
@@ -187,14 +192,12 @@ pub fn common_paths() -> &'static [&'static str] {
         "/v1",
         "/v2",
         "/v3",
-
         // REST resources
         "/graphql",
         "/graphiql",
         "/playground",
         "/explorer",
         "/query",
-
         // Swagger / API docs
         "/swagger",
         "/swagger/",
@@ -211,7 +214,19 @@ pub fn common_paths() -> &'static [&'static str] {
         "/redoc",
         "/rapidoc",
         "/docs/api",
-
+        "/swagger/index.html",
+        "/swagger/v1/swagger.json",
+        "/swagger/v2/swagger.json",
+        "/v2/api-docs",
+        "/v3/api-docs",
+        "/v3/api-docs/swagger-config",
+        "/api/openapi.json",
+        "/api/openapi.yaml",
+        "/api/swagger.json",
+        "/api/schema/",
+        "/api/schema.json",
+        "/api/schema.yaml",
+        "/openapi.yml",
         // Health / Status / Monitoring
         "/health",
         "/healthz",
@@ -230,7 +245,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/_info",
         "/server-info",
         "/server-status",
-        "/server-info",
         "/metrics",
         "/prometheus",
         "/monitoring",
@@ -243,7 +257,10 @@ pub fn common_paths() -> &'static [&'static str] {
         "/trace",
         "/_status",
         "/_health",
-
+        "/health/live",
+        "/health/ready",
+        "/health/liveness",
+        "/health/readiness",
         // Dev / Debug endpoints
         "/test",
         "/testing",
@@ -277,7 +294,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/configuration",
         "/init",
         "/initialize",
-
         // Common CMS paths
         "/wp-admin",
         "/wp-admin/",
@@ -299,9 +315,7 @@ pub fn common_paths() -> &'static [&'static str] {
         "/wp-signup.php",
         "/wp-register.php",
         "/readme.html",
-
         // Drupal
-        "/user/login",
         "/node",
         "/admin/content",
         "/admin/structure",
@@ -311,16 +325,13 @@ pub fn common_paths() -> &'static [&'static str] {
         "/update.php",
         "/CHANGELOG.txt",
         "/INSTALL.txt",
-
         // Joomla
-        "/administrator",
         "/administrator/index.php",
         "/components",
         "/modules",
         "/plugins",
         "/templates",
         "/configuration.php",
-
         // Common files
         "/robots.txt",
         "/sitemap.xml",
@@ -343,7 +354,16 @@ pub fn common_paths() -> &'static [&'static str] {
         "/apple-touch-icon.png",
         "/ads.txt",
         "/app-ads.txt",
-
+        "/.well-known/oauth-authorization-server",
+        "/.well-known/jwks.json",
+        "/jwks.json",
+        "/manifest.webmanifest",
+        "/site.webmanifest",
+        "/service-worker.js",
+        "/sw.js",
+        "/sitemap-index.xml",
+        "/sitemap.xml.gz",
+        "/sitemap_index.xml.gz",
         // Config / sensitive files
         "/.env",
         "/.env.local",
@@ -380,7 +400,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/tsconfig.json",
         "/angular.json",
         "/vue.config.js",
-
         // Git / VCS
         "/.git",
         "/.git/",
@@ -397,7 +416,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/.hg",
         "/.hg/",
         "/.bzr",
-
         // CI/CD
         "/.github",
         "/.github/workflows",
@@ -413,7 +431,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/Vagrantfile",
         "/Procfile",
         "/terraform.tfvars",
-
         // Backup files
         "/backup",
         "/backup/",
@@ -434,7 +451,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/public.zip",
         "/web.zip",
         "/files.zip",
-
         // Logs
         "/logs",
         "/logs/",
@@ -449,14 +465,12 @@ pub fn common_paths() -> &'static [&'static str] {
         "/server.log",
         "/system.log",
         "/wp-content/debug.log",
-
         // Uploads / Media / Files
         "/upload",
         "/uploads",
         "/uploads/",
         "/files",
         "/files/",
-        "/media",
         "/media/",
         "/images",
         "/images/",
@@ -479,7 +493,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/storage",
         "/storage/",
         "/cdn",
-
         // Database / Admin tools
         "/phpmyadmin",
         "/phpmyadmin/",
@@ -498,10 +511,8 @@ pub fn common_paths() -> &'static [&'static str] {
         "/elasticsearch",
         "/kibana",
         "/grafana",
-        "/prometheus",
         "/solr",
         "/couchdb",
-
         // Mail
         "/mail",
         "/email",
@@ -509,7 +520,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/roundcube",
         "/squirrelmail",
         "/postfix",
-
         // Common frameworks
         "/rails/info",
         "/rails/info/routes",
@@ -520,6 +530,9 @@ pub fn common_paths() -> &'static [&'static str] {
         "/_debug_toolbar",
         "/actuator",
         "/actuator/health",
+        "/actuator/health/liveness",
+        "/actuator/health/readiness",
+        "/actuator/prometheus",
         "/actuator/info",
         "/actuator/env",
         "/actuator/beans",
@@ -535,7 +548,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/actuator/jolokia",
         "/jolokia",
         "/jolokia/list",
-
         // Error pages
         "/404",
         "/403",
@@ -549,7 +561,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/forbidden",
         "/unauthorized",
         "/access-denied",
-
         // Misc
         "/cgi-bin",
         "/cgi-bin/",
@@ -625,17 +636,13 @@ pub fn common_paths() -> &'static [&'static str] {
         "/tls",
         "/key",
         "/keys",
-
         // Cloud / Infra
         "/.aws/credentials",
         "/.docker/config.json",
         "/.kube/config",
-        "/server-status",
-        "/server-info",
         "/nginx.conf",
         "/nginx_status",
         "/stub_status",
-
         // Node.js / JS frameworks
         "/node_modules/.package-lock.json",
         "/.next",
@@ -645,7 +652,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/netlify.toml",
         "/firebase.json",
         "/.firebaserc",
-
         // PHP
         "/vendor/autoload.php",
         "/artisan",
@@ -653,25 +659,16 @@ pub fn common_paths() -> &'static [&'static str] {
         "/horizon",
         "/nova",
         "/storage/logs/laravel.log",
-
         // Python / Django / Flask
         "/__pycache__",
         "/manage.py",
-        "/admin/",
         "/static/admin",
-        "/media/",
         "/api/schema",
-
         // .NET
         "/elmah",
-        "/elmah.axd",
-        "/web.config",
         "/bin/",
         "/App_Data",
-
         // Common SPA paths
-        "/app",
-        "/home",
         "/main",
         "/index",
         "/root",
@@ -708,7 +705,6 @@ pub fn common_paths() -> &'static [&'static str] {
         "/trending",
         "/popular",
         "/top",
-        "/new",
         "/latest",
         "/categories",
         "/tags",
@@ -721,9 +717,7 @@ pub fn common_paths() -> &'static [&'static str] {
         "/domains",
         "/sites",
         "/pages",
-        "/templates",
         "/themes",
-        "/plugins",
         "/extensions",
         "/addons",
         "/integrations",
@@ -754,4 +748,59 @@ pub fn common_paths() -> &'static [&'static str] {
         "/discounts",
         "/promo",
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::common_paths;
+    use std::collections::HashSet;
+
+    #[test]
+    fn candidates_are_unique() {
+        let mut seen = HashSet::new();
+        for path in common_paths() {
+            assert!(seen.insert(*path), "duplicate discovery path: {path}");
+        }
+        assert!(!seen.is_empty(), "discovery list must not be empty");
+    }
+
+    #[test]
+    fn candidates_are_literal_root_relative_paths() {
+        for path in common_paths() {
+            assert!(
+                path.starts_with('/') && !path.starts_with("//"),
+                "path must resolve within the target origin: {path}"
+            );
+            assert!(
+                path.is_ascii()
+                    && !path.bytes().any(|byte| byte.is_ascii_whitespace()
+                        || byte.is_ascii_control()
+                        || matches!(byte, b'?' | b'#' | b'*' | b'\\' | b'%' | b'{' | b'}')),
+                "path must be literal and require no URL normalization: {path}"
+            );
+            assert!(!path[1..].contains("//"), "empty path segment: {path}");
+            assert!(
+                !path.split('/').any(|segment| matches!(segment, "." | "..")),
+                "dot segment would change the requested path: {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn preserves_distinct_case_and_trailing_slash_variants() {
+        let paths = common_paths();
+        for path in [
+            "/admin",
+            "/admin/",
+            "/web.config",
+            "/Web.config",
+            "/phpmyadmin",
+            "/phpMyAdmin",
+        ] {
+            assert!(
+                paths.contains(&path),
+                "missing distinct URL variant: {path}"
+            );
+        }
+    }
 }

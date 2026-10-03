@@ -13,11 +13,11 @@
 
 # Pathfinder
 
-A fast web path discovery and crawling CLI tool written in Rust. Unlike traditional wordlist-based tools like Gobuster, Pathfinder combines **automatic crawling**, **built-in path brute-forcing (~600 common paths)**, and **link extraction** to discover as many valid URLs as possible on a target website.
+A fast web path discovery and crawling CLI tool written in Rust. Unlike traditional wordlist-based tools like Gobuster, Pathfinder combines **automatic crawling**, **built-in path brute-forcing (700+ common paths)**, and **link extraction** to discover as many valid URLs as possible on a target website.
 
 ## Features
 
-- **Automatic path discovery** — built-in wordlist of ~600 common paths (admin panels, APIs, config files, backups, debug endpoints, CMS paths, etc.)
+- **Automatic path discovery** — built-in wordlist of 700+ common paths (admin panels, APIs, config files, backups, debug endpoints, CMS paths, etc.)
 - **Recursive crawling** — follows links found in HTML to discover more pages
 - **HTML parsing** via `scraper` — extracts URLs from `<a>`, `<form>`, `<script>`, `<link>`, `<img>`, `<iframe>`, `<video>`, `<source>` tags
 - **JavaScript URL extraction** (optional) — regex-based path detection in JS files
@@ -56,6 +56,8 @@ pathfinder -u https://example.com
 ```bash
 pathfinder -u https://example.com -d 3 -c 50
 ```
+
+Use `--depth 0` to request only the target URL. Built-in discovery paths start at depth 1. Concurrency must be greater than zero.
 
 ### Show only 200 responses
 
@@ -108,7 +110,7 @@ pathfinder -u https://example.com -d 3 -c 100 --js --status 200 --json output.js
 ```
 Target URL
     ↓
-HTTP request + built-in path brute-force (~600 common paths)
+HTTP request + built-in path brute-force (700+ common paths)
     ↓
 Parse HTML (scraper) / JS (regex) / robots.txt / sitemap.xml
     ↓
@@ -165,9 +167,9 @@ Errors:     3
 src/
 ├── main.rs          # Entry point
 ├── cli.rs           # CLI argument parsing (clap)
-├── crawler.rs       # Async crawl engine (tokio, semaphore, channels)
+├── crawler.rs       # Async crawl engine (bounded active requests, pending queue)
 ├── parser.rs        # HTML link extraction (scraper) + JS regex
-├── discovery.rs     # Built-in common path wordlist (~600 paths)
+├── discovery.rs     # Built-in common path wordlist (700+ paths)
 └── models.rs        # Data structures (Task, CrawlResult)
 ```
 
@@ -189,3 +191,7 @@ The embedded wordlist covers:
 ## License
 
 MIT
+
+## Development
+
+Run regression tests with `cargo test --locked`. Tests use a local HTTP server and cover large discovery queues, depth-zero scans, URL resolution, and domain boundaries.

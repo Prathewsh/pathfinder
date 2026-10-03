@@ -1,24 +1,28 @@
 use crate::cli::Cli;
 use crate::models::{CrawlResult, Task};
 use crate::parser::extract_urls;
-use anyhow::Result;
-use dashmap::DashSet;
+use anyhow::{ensure, Result};
+use futures::{stream::FuturesUnordered, StreamExt};
 use reqwest::Client;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::collections::{HashSet, VecDeque};
 use std::time::Instant;
-use tokio::sync::{mpsc, Semaphore};
 use url::Url;
 
 pub struct Crawler {
     cli: Cli,
     base_url: Url,
     client: Client,
-    visited: Arc<DashSet<String>>,
+    visited: HashSet<String>,
 }
 
 impl Crawler {
-    pub fn new(cli: Cli, base_url: Url) -> Result<Self> {
+    pub fn new(cli: Cli, mut base_url: Url) -> Result<Self> {
+        ensure!(cli.concurrency > 0, "Concurrency must be greater than zero");
+        ensure!(
+            matches!(base_url.scheme(), "http" | "https") && base_url.host_str().is_some(),
+            "Target must be an HTTP or HTTPS URL with a host"
+        );
+        base_url.set_fragment(None);
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .redirect(reqwest::redirect::Policy::limited(10))
@@ -29,35 +33,27 @@ impl Crawler {
             cli,
             base_url,
             client,
-            visited: Arc::new(DashSet::new()),
+            visited: HashSet::new(),
         })
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        let (task_tx, mut task_rx) = mpsc::channel::<Task>(self.cli.concurrency * 2);
-        let (result_tx, mut result_rx) = mpsc::unbounded_channel::<CrawlResult>();
-        let semaphore = Arc::new(Semaphore::new(self.cli.concurrency));
-        let in_flight = Arc::new(AtomicUsize::new(0));
+        let mut pending = VecDeque::new();
+        self.visited.clear();
+        self.visited.insert(self.base_url.to_string());
+        pending.push_back(Task {
+            url: self.base_url.clone(),
+            depth: 0,
+        });
 
-        // Seed initial URLs
-        let initial_url = self.base_url.clone();
-        self.visited.insert(initial_url.to_string());
-        task_tx.send(Task { url: initial_url, depth: 0 }).await?;
-
-        let robots_url = self.base_url.join("/robots.txt")?;
-        if self.visited.insert(robots_url.to_string()) {
-            task_tx.send(Task { url: robots_url, depth: 1 }).await?;
-        }
-        let sitemap_url = self.base_url.join("/sitemap.xml")?;
-        if self.visited.insert(sitemap_url.to_string()) {
-            task_tx.send(Task { url: sitemap_url, depth: 1 }).await?;
-        }
-
-        // Seed built-in common paths for automatic discovery
-        for path in crate::discovery::common_paths() {
-            if let Ok(url) = self.base_url.join(path) {
+        if self.cli.depth > 0 {
+            for path in ["/robots.txt", "/sitemap.xml"]
+                .into_iter()
+                .chain(crate::discovery::common_paths().iter().copied())
+            {
+                let url = self.base_url.join(path)?;
                 if self.visited.insert(url.to_string()) {
-                    task_tx.send(Task { url, depth: 1 }).await?;
+                    pending.push_back(Task { url, depth: 1 });
                 }
             }
         }
@@ -69,59 +65,48 @@ impl Crawler {
 
         let mut results: Vec<CrawlResult> = Vec::new();
 
+        let mut active = FuturesUnordered::new();
         loop {
-            tokio::select! {
-                biased;
+            while active.len() < self.cli.concurrency {
+                let Some(task) = pending.pop_front() else {
+                    break;
+                };
+                active.push(Self::process_task(
+                    task,
+                    self.client.clone(),
+                    self.cli.clone(),
+                    self.base_url.clone(),
+                ));
+            }
 
-                // Collect completed results first
-                Some(result) = result_rx.recv() => {
-                    in_flight.fetch_sub(1, Ordering::SeqCst);
-
-                    if self.cli.status.is_none() || self.cli.status == Some(result.status) {
-                        println!("[{}]  {}", result.status, result.url);
-                    }
-                    results.push(result);
-                }
-
-                // Dispatch new tasks
-                Some(task) = task_rx.recv() => {
-                    in_flight.fetch_add(1, Ordering::SeqCst);
-
-                    let client = self.client.clone();
-                    let task_tx = task_tx.clone();
-                    let result_tx = result_tx.clone();
-                    let visited = self.visited.clone();
-                    let sem = semaphore.clone();
-                    let cli = self.cli.clone();
-                    let base_url = self.base_url.clone();
-
-                    tokio::spawn(async move {
-                        let _permit = sem.acquire().await.unwrap();
-                        Self::process_task(task, client, task_tx, result_tx, visited, cli, base_url).await;
+            let Some((result, discovered)) = active.next().await else {
+                break;
+            };
+            for url in discovered {
+                if self.visited.insert(url.to_string()) {
+                    pending.push_back(Task {
+                        url,
+                        depth: result.depth + 1,
                     });
                 }
-
-                else => break,
             }
-
-            // If nothing is in-flight and the task channel is empty, we're done
-            if in_flight.load(Ordering::SeqCst) == 0 && task_rx.is_empty() {
-                // Drain any remaining results
-                while let Ok(result) = result_rx.try_recv() {
-                    if self.cli.status.is_none() || self.cli.status == Some(result.status) {
-                        println!("[{}]  {}", result.status, result.url);
-                    }
-                    results.push(result);
-                }
-                break;
+            if self.cli.status.is_none() || self.cli.status == Some(result.status) {
+                println!("[{}]  {}", result.status, result.url);
             }
+            results.push(result);
         }
 
         // Print summary
         let total = results.len();
         let ok = results.iter().filter(|r| r.status == 200).count();
-        let redirects = results.iter().filter(|r| (300..400).contains(&r.status)).count();
-        let errors = results.iter().filter(|r| r.status >= 400).count();
+        let redirects = results
+            .iter()
+            .filter(|r| (300..400).contains(&r.status))
+            .count();
+        let errors = results
+            .iter()
+            .filter(|r| r.status == 0 || r.status >= 400)
+            .count();
 
         println!("\nDiscovered: {}", total);
         println!("200 OK:     {}", ok);
@@ -130,7 +115,10 @@ impl Crawler {
 
         // Write output files
         if let Some(ref path) = self.cli.output {
-            let lines: Vec<String> = results.iter().map(|r| format!("[{}] {}", r.status, r.url)).collect();
+            let lines: Vec<String> = results
+                .iter()
+                .map(|r| format!("[{}] {}", r.status, r.url))
+                .collect();
             std::fs::write(path, lines.join("\n"))?;
             println!("\nResults saved to {}", path);
         }
@@ -147,12 +135,9 @@ impl Crawler {
     async fn process_task(
         task: Task,
         client: Client,
-        task_tx: mpsc::Sender<Task>,
-        result_tx: mpsc::UnboundedSender<CrawlResult>,
-        visited: Arc<DashSet<String>>,
         cli: Cli,
         base_url: Url,
-    ) {
+    ) -> (CrawlResult, Vec<Url>) {
         let start = Instant::now();
         let res = client.get(task.url.clone()).send().await;
         let elapsed = start.elapsed().as_millis();
@@ -167,44 +152,117 @@ impl Crawler {
                     .map(|s| s.to_string());
                 let size = response.content_length().unwrap_or(0);
 
+                let response_url = response.url().clone();
                 let body = response.text().await.unwrap_or_default();
                 let size = if size == 0 { body.len() as u64 } else { size };
 
-                // Parse and discover new URLs
+                let mut discovered = Vec::new();
                 if let Some(ct) = &content_type {
                     if task.depth < cli.depth
-                        && (ct.contains("text/html")
-                            || (cli.js && ct.contains("javascript")))
+                        && (ct.contains("text/html") || (cli.js && ct.contains("javascript")))
                     {
-                        let new_urls =
-                            extract_urls(&body, &task.url, &base_url, cli.subdomains, cli.js);
-                        for u in new_urls {
-                            if visited.insert(u.to_string()) {
-                                let _ = task_tx.send(Task { url: u, depth: task.depth + 1 }).await;
-                            }
-                        }
+                        discovered =
+                            extract_urls(&body, &response_url, &base_url, cli.subdomains, cli.js);
                     }
                 }
 
-                let _ = result_tx.send(CrawlResult {
-                    url: task.url.to_string(),
-                    status,
-                    content_type,
-                    size,
-                    depth: task.depth,
-                    response_time_ms: elapsed,
-                });
+                (
+                    CrawlResult {
+                        url: task.url.to_string(),
+                        status,
+                        content_type,
+                        size,
+                        depth: task.depth,
+                        response_time_ms: elapsed,
+                    },
+                    discovered,
+                )
             }
-            Err(_e) => {
-                let _ = result_tx.send(CrawlResult {
+            Err(_e) => (
+                CrawlResult {
                     url: task.url.to_string(),
                     status: 0,
                     content_type: None,
                     size: 0,
                     depth: task.depth,
                     response_time_ms: elapsed,
-                });
-            }
+                },
+                Vec::new(),
+            ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+    use tokio::time::{timeout, Duration};
+
+    #[test]
+    fn rejects_invalid_configuration() {
+        let cli = Cli::parse_from(["pathfinder", "-u", "https://example.com", "-c", "0"]);
+        assert!(Crawler::new(cli, Url::parse("https://example.com").unwrap()).is_err());
+        let cli = Cli::parse_from(["pathfinder", "-u", "file:///tmp/page"]);
+        assert!(Crawler::new(cli, Url::parse("file:///tmp/page").unwrap()).is_err());
+    }
+
+    async fn crawl_at_depth(depth: u32) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}/", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                let mut buf = [0; 1024];
+                while !request.windows(4).any(|w| w == b"\r\n\r\n") {
+                    let n = socket.read(&mut buf).await.unwrap();
+                    if n == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&buf[..n]);
+                }
+                let body = "<a href='/unique-child#one'>child</a><a href='/unique-child#two'>duplicate</a>";
+                let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body);
+                socket.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let cli = Cli::parse_from([
+            "pathfinder",
+            "-u",
+            &base,
+            "-c",
+            "1",
+            "-d",
+            &depth.to_string(),
+        ]);
+        let mut crawler = Crawler::new(cli, Url::parse(&base).unwrap()).unwrap();
+        // Ignore machine-specific HTTP proxy settings in this loopback test.
+        crawler.client = Client::builder().no_proxy().build().unwrap();
+        let outcome = timeout(Duration::from_secs(15), crawler.run()).await;
+        server.abort();
+        outcome
+            .expect("crawler must finish even when seeds exceed concurrency")
+            .unwrap();
+        if depth == 0 {
+            assert_eq!(crawler.visited.len(), 1);
+        } else {
+            assert!(crawler.visited.contains(&format!("{base}unique-child")));
+            assert!(crawler.visited.contains(&format!("{base}robots.txt")));
+            assert!(crawler.visited.len() > 200);
+            assert!(crawler.visited.iter().all(|url| !url.contains('#')));
+        }
+    }
+
+    #[tokio::test]
+    async fn completes_large_seed_queue_with_one_worker() {
+        crawl_at_depth(1).await;
+    }
+
+    #[tokio::test]
+    async fn depth_zero_only_requests_target() {
+        crawl_at_depth(0).await;
     }
 }

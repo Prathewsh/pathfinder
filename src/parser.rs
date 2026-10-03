@@ -2,9 +2,15 @@ use regex::Regex;
 use scraper::{Html, Selector};
 use url::Url;
 
-pub fn extract_urls(html: &str, base: &Url, domain: &Url, subdomains: bool, parse_js: bool) -> Vec<Url> {
+pub fn extract_urls(
+    html: &str,
+    base: &Url,
+    domain: &Url,
+    subdomains: bool,
+    parse_js: bool,
+) -> Vec<Url> {
     let mut urls = Vec::new();
-    
+
     // Parse HTML
     let document = Html::parse_document(html);
     let selectors = vec![
@@ -17,7 +23,7 @@ pub fn extract_urls(html: &str, base: &Url, domain: &Url, subdomains: bool, pars
         ("video", "src"),
         ("source", "src"),
     ];
-    
+
     for (tag, attr) in selectors {
         if let Ok(selector) = Selector::parse(tag) {
             for element in document.select(&selector) {
@@ -32,7 +38,7 @@ pub fn extract_urls(html: &str, base: &Url, domain: &Url, subdomains: bool, pars
             }
         }
     }
-    
+
     // Quick regex for JS if requested
     if parse_js {
         let re = Regex::new(r#"["'](/[a-zA-Z0-9_\-\./]+)["']"#).unwrap();
@@ -47,7 +53,7 @@ pub fn extract_urls(html: &str, base: &Url, domain: &Url, subdomains: bool, pars
             }
         }
     }
-    
+
     urls
 }
 
@@ -59,9 +65,61 @@ fn is_allowed(url: &Url, domain: &Url, subdomains: bool) -> bool {
         if u_host == d_host {
             return true;
         }
-        if subdomains && u_host.ends_with(d_host) {
+        if subdomains
+            && u_host
+                .strip_suffix(d_host)
+                .is_some_and(|prefix| prefix.ends_with('.'))
+        {
             return true;
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn subdomains_require_a_dns_label_boundary() {
+        let domain = Url::parse("https://example.com").unwrap();
+        for host in ["example.com", "www.example.com", "a.b.example.com"] {
+            assert!(is_allowed(
+                &Url::parse(&format!("https://{host}")).unwrap(),
+                &domain,
+                true
+            ));
+        }
+        for host in ["notexample.com", "example.com.evil.test", "other.test"] {
+            assert!(!is_allowed(
+                &Url::parse(&format!("https://{host}")).unwrap(),
+                &domain,
+                true
+            ));
+        }
+        assert!(!is_allowed(
+            &Url::parse("https://www.example.com").unwrap(),
+            &domain,
+            false
+        ));
+        assert!(!is_allowed(
+            &Url::parse("ftp://example.com").unwrap(),
+            &domain,
+            true
+        ));
+    }
+
+    #[test]
+    fn relative_links_use_the_page_url_and_strip_fragments() {
+        let domain = Url::parse("https://example.com").unwrap();
+        let page = domain.join("/docs/start/").unwrap();
+        let urls = extract_urls(
+            "<a href='next#intro'>next</a>",
+            &page,
+            &domain,
+            false,
+            false,
+        );
+        assert_eq!(urls, vec![domain.join("/docs/start/next").unwrap()]);
+    }
 }
